@@ -259,6 +259,11 @@ def rag_chat_page():
         if len(st.session_state.messages) == 0:
             st.session_state.messages.append({"role": "system", "content": system_prompt})
 
+        # Ensure all assistant messages have stop_reason
+        for msg in st.session_state.messages:
+            if msg.get("role") == "assistant" and "stop_reason" not in msg:
+                msg["stop_reason"] = "end_of_message"
+
         # Query the vector DB
         rag_response = llama_stack_api.client.tool_runtime.rag_tool.query(
             content=prompt, vector_db_ids=list(selected_vector_dbs)
