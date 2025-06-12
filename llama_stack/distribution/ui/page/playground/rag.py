@@ -305,7 +305,11 @@ def rag_chat_page():
                         message_placeholder.markdown(full_response + "▌")
             message_placeholder.markdown(full_response)
 
-        response_dict = {"role": "assistant", "content": full_response, "stop_reason": "end_of_message"}
+        response_dict = {
+            "role": "assistant",
+            "content": full_response,
+            "stop_reason": "end_of_message"
+        }
         st.session_state.messages.append(response_dict)
         st.session_state.displayed_messages.append(response_dict)
 
