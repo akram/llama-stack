@@ -10,8 +10,8 @@ import streamlit as st
 from llama_stack_client import Agent, AgentEventLogger, RAGDocument
 
 from llama_stack.apis.common.content_types import ToolCallDelta
-from llama_stack.distribution.ui.modules.api import llama_stack_api
-from llama_stack.distribution.ui.modules.utils import data_url_from_file
+from modules.api import llama_stack_api
+from modules.utils import data_url_from_file
 
 
 def rag_chat_page():
@@ -75,7 +75,8 @@ def rag_chat_page():
                     
                     # Use the first available embedding model
                     embedding_model = embedding_models[0].identifier
-                    embedding_dimension = embedding_models[0].embedding_dimension
+                    # Default to 1536 dimensions if not specified in model config
+                    embedding_dimension = getattr(embedding_models[0], 'embedding_dimension', 1536)
 
                     llama_stack_api.client.vector_dbs.register(
                         vector_db_id=vector_db_name,  # Use the user-provided name
@@ -91,6 +92,8 @@ def rag_chat_page():
                         chunk_size_in_tokens=512,
                     )
                     st.success("Vector database created successfully!")
+                    # Force a rerun to update the vector DB list
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error creating vector database: {str(e)}")
                     return
@@ -111,9 +114,18 @@ def rag_chat_page():
         # select memory banks
         vector_dbs = llama_stack_api.client.vector_dbs.list()
         vector_dbs = [vector_db.identifier for vector_db in vector_dbs]
+        
+        # Initialize selected_vector_dbs
+        selected_vector_dbs = []
+        
+        # If no vector DBs are selected and we have available ones, select the first one
+        if not selected_vector_dbs and vector_dbs:
+            selected_vector_dbs = [vector_dbs[0]]
+            
         selected_vector_dbs = st.multiselect(
             label="Select Document Collections to use in RAG queries",
             options=vector_dbs,
+            default=selected_vector_dbs if selected_vector_dbs else None,
             on_change=reset_agent_and_chat,
             disabled=should_disable_input(),
         )
