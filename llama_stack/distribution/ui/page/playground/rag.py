@@ -48,36 +48,52 @@ def rag_chat_page():
                 value="rag_vector_db",
                 help="Enter a unique identifier for this document collection",
             )
-            if st.button("Create Document Collection"):
-                documents = [
-                    RAGDocument(
-                        document_id=uploaded_file.name,
-                        content=data_url_from_file(uploaded_file),
+            if st.button("Create Vector Database"):
+                try:
+                    documents = [
+                        RAGDocument(
+                            document_id=uploaded_file.name,
+                            content=data_url_from_file(uploaded_file),
+                        )
+                        for i, uploaded_file in enumerate(uploaded_files)
+                    ]
+
+                    providers = llama_stack_api.client.providers.list()
+                    vector_io_provider = None
+
+                    for x in providers:
+                        if x.api == "vector_io":
+                            vector_io_provider = x.provider_id
+
+                    # Get available embedding models
+                    available_models = llama_stack_api.client.models.list()
+                    embedding_models = [model for model in available_models if model.model_type == "embedding"]
+                    
+                    if not embedding_models:
+                        st.error("No embedding models available. Please check your Llama Stack configuration.")
+                        return
+                    
+                    # Use the first available embedding model
+                    embedding_model = embedding_models[0].identifier
+                    embedding_dimension = embedding_models[0].embedding_dimension
+
+                    llama_stack_api.client.vector_dbs.register(
+                        vector_db_id=vector_db_name,  # Use the user-provided name
+                        embedding_dimension=embedding_dimension,
+                        embedding_model=embedding_model,
+                        provider_id=vector_io_provider,
                     )
-                    for i, uploaded_file in enumerate(uploaded_files)
-                ]
 
-                providers = llama_stack_api.client.providers.list()
-                vector_io_provider = None
-
-                for x in providers:
-                    if x.api == "vector_io":
-                        vector_io_provider = x.provider_id
-
-                llama_stack_api.client.vector_dbs.register(
-                    vector_db_id=vector_db_name,  # Use the user-provided name
-                    embedding_dimension=384,
-                    embedding_model="all-MiniLM-L6-v2",
-                    provider_id=vector_io_provider,
-                )
-
-                # insert documents using the custom vector db name
-                llama_stack_api.client.tool_runtime.rag_tool.insert(
-                    vector_db_id=vector_db_name,  # Use the user-provided name
-                    documents=documents,
-                    chunk_size_in_tokens=512,
-                )
-                st.success("Vector database created successfully!")
+                    # insert documents using the custom vector db name
+                    llama_stack_api.client.tool_runtime.rag_tool.insert(
+                        vector_db_id=vector_db_name,  # Use the user-provided name
+                        documents=documents,
+                        chunk_size_in_tokens=512,
+                    )
+                    st.success("Vector database created successfully!")
+                except Exception as e:
+                    st.error(f"Error creating vector database: {str(e)}")
+                    return
 
         st.subheader("RAG Parameters", divider=True)
 
