@@ -290,13 +290,19 @@ def rag_chat_page():
 
             # Display assistant response
             for chunk in response:
-                response_delta = chunk.event.delta
-                if isinstance(response_delta, ToolCallDelta):
-                    retrieval_response += response_delta.tool_call.replace("====", "").strip()
-                    retrieval_message_placeholder.info(retrieval_response)
+                if hasattr(chunk, 'event') and hasattr(chunk.event, 'delta'):
+                    response_delta = chunk.event.delta
+                    if isinstance(response_delta, ToolCallDelta):
+                        retrieval_response += response_delta.tool_call.replace("====", "").strip()
+                        retrieval_message_placeholder.info(retrieval_response)
+                    else:
+                        full_response += chunk.event.delta.text
+                        message_placeholder.markdown(full_response + "▌")
                 else:
-                    full_response += chunk.event.delta.text
-                    message_placeholder.markdown(full_response + "▌")
+                    # Handle case where chunk might be a direct text response
+                    if hasattr(chunk, 'text'):
+                        full_response += chunk.text
+                        message_placeholder.markdown(full_response + "▌")
             message_placeholder.markdown(full_response)
 
         response_dict = {"role": "assistant", "content": full_response, "stop_reason": "end_of_message"}
