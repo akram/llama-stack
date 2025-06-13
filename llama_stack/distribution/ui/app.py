@@ -45,8 +45,7 @@ def main():
                 native_evaluation_page,
             ],
             "Inspect": [provider_page, resources_page],
-        },
-        expanded=False,
+        }
     )
     pg.run()
 

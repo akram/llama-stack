@@ -45,13 +45,12 @@ def tool_chat_page():
 
         st.subheader("Available ToolGroups")
 
-        toolgroup_selection = st.pills(
+        toolgroup_selection = st.multiselect(
             label="Built-in tools",
             options=builtin_tools_list,
-            selection_mode="multi",
-            on_change=reset_agent,
             format_func=lambda tool: "".join(tool.split("::")[1:]),
             help="List of built-in tools from your llama stack server.",
+            on_change=reset_agent,
         )
 
         if "builtin::rag" in toolgroup_selection:
@@ -65,13 +64,12 @@ def tool_chat_page():
                 on_change=reset_agent,
             )
 
-        mcp_selection = st.pills(
+        mcp_selection = st.multiselect(
             label="MCP Servers",
             options=mcp_tools_list,
-            selection_mode="multi",
-            on_change=reset_agent,
             format_func=lambda tool: "".join(tool.split("::")[1:]),
             help="List of MCP servers registered to your llama stack server.",
+            on_change=reset_agent,
         )
 
         toolgroup_selection.extend(mcp_selection)

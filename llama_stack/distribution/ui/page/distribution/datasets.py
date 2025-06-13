@@ -16,3 +16,5 @@ def datasets():
     if len(datasets_info) > 0:
         selected_dataset = st.selectbox("Select a dataset", list(datasets_info.keys()))
         st.json(datasets_info[selected_dataset], expanded=True)
+    else:
+        st.info("No datasets found")

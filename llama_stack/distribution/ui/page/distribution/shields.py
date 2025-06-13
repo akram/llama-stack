@@ -15,5 +15,8 @@ def shields():
 
     shields_info = {s.identifier: s.to_dict() for s in llama_stack_api.client.shields.list()}
 
-    selected_shield = st.selectbox("Select a shield", list(shields_info.keys()))
-    st.json(shields_info[selected_shield])
+    if len(shields_info) > 0:
+        selected_shield = st.selectbox("Select a shield", list(shields_info.keys()))
+        st.json(shields_info[selected_shield])
+    else:
+        st.info("No shields found")

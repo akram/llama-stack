@@ -18,3 +18,5 @@ def benchmarks():
     if len(benchmarks_info) > 0:
         selected_benchmark = st.selectbox("Select an eval task", list(benchmarks_info.keys()), key="benchmark_inspect")
         st.json(benchmarks_info[selected_benchmark], expanded=True)
+    else:
+        st.info("No benchmarks found")

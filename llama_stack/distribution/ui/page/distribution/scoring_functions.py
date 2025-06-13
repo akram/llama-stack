@@ -14,5 +14,8 @@ def scoring_functions():
 
     scoring_functions_info = {s.identifier: s.to_dict() for s in llama_stack_api.client.scoring_functions.list()}
 
-    selected_scoring_function = st.selectbox("Select a scoring function", list(scoring_functions_info.keys()))
-    st.json(scoring_functions_info[selected_scoring_function], expanded=True)
+    if len(scoring_functions_info) > 0:
+        selected_scoring_function = st.selectbox("Select a scoring function", list(scoring_functions_info.keys()))
+        st.json(scoring_functions_info[selected_scoring_function], expanded=True)
+    else:
+        st.info("No scoring functions found")
