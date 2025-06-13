@@ -4,9 +4,17 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 import streamlit as st
+from modules.auth import require_auth, logout
 
 
+@require_auth()
 def main():
+    # Add logout button in the sidebar
+    with st.sidebar:
+        logout()
+        if st.session_state.user_info:
+            st.write(f"Logged in as: {st.session_state.user_info.get('email', 'User')}")
+
     # Evaluation pages
     application_evaluation_page = st.Page(
         "page/evaluations/app_eval.py",

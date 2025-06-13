@@ -3,3 +3,6 @@ llama-stack-client>=0.2.1
 pandas
 streamlit
 streamlit-option-menu
+python-jose[cryptography]
+requests
+python-dotenv
