@@ -92,6 +92,8 @@ def rag_chat_page():
                         chunk_size_in_tokens=512,
                     )
                     st.success("Vector database created successfully!")
+                    # Store the new vector DB name in session state
+                    st.session_state.new_vector_db = vector_db_name
                     # Force a rerun to update the vector DB list
                     st.rerun()
                 except Exception as e:
@@ -118,8 +120,13 @@ def rag_chat_page():
         # Initialize selected_vector_dbs
         selected_vector_dbs = []
         
+        # If we have a new vector DB in session state, select it
+        if "new_vector_db" in st.session_state and st.session_state.new_vector_db in vector_dbs:
+            selected_vector_dbs = [st.session_state.new_vector_db]
+            # Clear the session state after using it
+            del st.session_state.new_vector_db
         # If no vector DBs are selected and we have available ones, select the first one
-        if not selected_vector_dbs and vector_dbs:
+        elif not selected_vector_dbs and vector_dbs:
             selected_vector_dbs = [vector_dbs[0]]
             
         selected_vector_dbs = st.multiselect(
