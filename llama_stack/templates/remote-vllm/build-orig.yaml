@@ -1,4 +1,4 @@
-version: '2'
+version: 2
 distribution_spec:
   description: Use (an external) vLLM server for running LLM inference
   providers:
@@ -6,7 +6,9 @@ distribution_spec:
     - remote::vllm
     - inline::sentence-transformers
     vector_io:
-    - inline::milvus
+    - inline::faiss
+    - remote::chromadb
+    - remote::pgvector
     safety:
     - inline::llama-guard
     agents:
@@ -28,4 +30,7 @@ distribution_spec:
     - inline::rag-runtime
     - remote::model-context-protocol
     - remote::wolfram-alpha
-image_type: container
+image_type: conda
+additional_pip_packages:
+- aiosqlite
+- sqlalchemy[asyncio]
