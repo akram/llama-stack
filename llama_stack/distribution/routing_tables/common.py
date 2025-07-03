@@ -169,11 +169,65 @@ class CommonRoutingTableImpl(RoutingTable):
             return None
 
         # Check if user has permission to access this object
-        if not is_action_allowed(self.policy, "read", obj, get_authenticated_user()):
+        user = get_authenticated_user()
+        if not is_action_allowed(self.policy, "read", obj, user):
             logger.debug(f"Access denied to {type} '{identifier}'")
-            return None
+            # Throw AccessDeniedError instead of returning None so callers can distinguish
+            # between "not found" and "access denied"
+            raise AccessDeniedError("read", obj, user)
 
         return obj
+
+    async def check_delete_permission(self, resource_type: str) -> None:
+        """Check if user has general DELETE permission for a resource type.
+
+        Throws AccessDeniedError if user lacks permission.
+        """
+        user = get_authenticated_user()
+        if user:  # Only check authenticated users
+
+            class PublicResource(ProtectedResource):
+                def __init__(self, resource_type: str):
+                    self.type = resource_type
+                    self.identifier = "public-test"
+                    self.owner = None  # Public resource has no owner
+
+            # If user has no general delete access to this resource type, throw 403
+            if not is_action_allowed(self.policy, "delete", PublicResource(resource_type), user):
+
+                class GenericResource(ProtectedResource):
+                    def __init__(self, resource_type: str):
+                        self.type = resource_type
+                        self.identifier = "*"
+                        self.owner = None
+
+                raise AccessDeniedError("delete", GenericResource(resource_type), user)
+
+    async def unregister_object_by_id(self, resource_type: str, identifier: str) -> None:
+        """Unregister an object by type and identifier with proper access control.
+
+        This method implements idempotent delete behavior:
+        - If user has no DELETE permission: 403 Forbidden (regardless of resource existence)
+        - If user has DELETE permission but resource doesn't exist: Success (idempotent)
+        - If user has DELETE permission and resource exists: Delete and return success
+        """
+        # First check if user has general DELETE permission for this resource type
+        await self.check_delete_permission(resource_type)
+
+        # Try to get the object
+        try:
+            obj = await self.get_object_by_identifier(resource_type, identifier)
+            if obj is None:
+                # Resource doesn't exist, but user has permission - idempotent delete
+                return
+
+            # User has permission and resource exists - proceed with delete
+            await self.unregister_object(obj)
+
+        except AccessDeniedError:
+            # This shouldn't happen since we already checked general permission,
+            # but it could occur if there are specific resource-level restrictions
+            raise
 
     async def unregister_object(self, obj: RoutableObjectWithProvider) -> None:
         user = get_authenticated_user()

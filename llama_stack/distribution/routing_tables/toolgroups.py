@@ -123,10 +123,7 @@ class ToolGroupsRoutingTable(CommonRoutingTableImpl, ToolGroups):
         return toolgroup
 
     async def unregister_toolgroup(self, toolgroup_id: str) -> None:
-        tool_group = await self.get_tool_group(toolgroup_id)
-        if tool_group is None:
-            raise ValueError(f"Tool group {toolgroup_id} not found")
-        await self.unregister_object(tool_group)
+        await self.unregister_object_by_id("tool_group", toolgroup_id)
 
     async def shutdown(self) -> None:
         pass

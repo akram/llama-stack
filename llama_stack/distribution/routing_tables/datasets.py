@@ -86,7 +86,4 @@ class DatasetsRoutingTable(CommonRoutingTableImpl, Datasets):
         return dataset
 
     async def unregister_dataset(self, dataset_id: str) -> None:
-        dataset = await self.get_dataset(dataset_id)
-        if dataset is None:
-            raise ValueError(f"Dataset {dataset_id} not found")
-        await self.unregister_object(dataset)
+        await self.unregister_object_by_id("dataset", dataset_id)

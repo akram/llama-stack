@@ -77,7 +77,7 @@ async def test_access_control_with_cache(mock_get_authenticated_user, test_setup
     assert model.identifier == "model-public"
     model = await routing_table.get_model("model-admin")
     assert model.identifier == "model-admin"
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-data-scientist")
 
     mock_get_authenticated_user.return_value = User("test-user", {"roles": ["data-scientist"], "teams": ["other-team"]})
@@ -86,9 +86,9 @@ async def test_access_control_with_cache(mock_get_authenticated_user, test_setup
     assert all_models.data[0].identifier == "model-public"
     model = await routing_table.get_model("model-public")
     assert model.identifier == "model-public"
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-admin")
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-data-scientist")
 
     mock_get_authenticated_user.return_value = User("test-user", {"roles": ["data-scientist"], "teams": ["ml-team"]})
@@ -102,7 +102,7 @@ async def test_access_control_with_cache(mock_get_authenticated_user, test_setup
     assert model.identifier == "model-public"
     model = await routing_table.get_model("model-data-scientist")
     assert model.identifier == "model-data-scientist"
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-admin")
 
 
@@ -133,7 +133,7 @@ async def test_access_control_and_updates(mock_get_authenticated_user, test_setu
             "roles": ["user"],
         },
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-updates")
     mock_get_authenticated_user.return_value = User(
         "test-user",
@@ -193,7 +193,7 @@ async def test_no_user_attributes(mock_get_authenticated_user, test_setup):
     model = await routing_table.get_model("model-public-2")
     assert model.identifier == "model-public-2"
 
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-restricted")
 
     all_models = await routing_table.list_models()
@@ -230,7 +230,7 @@ async def test_automatic_access_attributes(mock_get_authenticated_user, test_set
 
     # Verify another user without matching attributes can't access it
     mock_get_authenticated_user.return_value = User("test-user", {"roles": ["engineer"], "teams": ["infra-team"]})
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("auto-access-model")
 
     # But a user with matching attributes can
@@ -311,9 +311,9 @@ async def test_access_policy(mock_get_authenticated_user, test_setup_with_access
     )
     model = await routing_table.get_model("model-1")
     assert model.identifier == "model-1"
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-2")
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-3")
     with pytest.raises(AccessDeniedError):
         await routing_table.register_model("model-4", provider_id="test_provider")
@@ -329,9 +329,9 @@ async def test_access_policy(mock_get_authenticated_user, test_setup_with_access
     )
     model = await routing_table.get_model("model-2")
     assert model.identifier == "model-2"
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-1")
-    with pytest.raises(ValueError):
+    with pytest.raises(AccessDeniedError):
         await routing_table.get_model("model-3")
     with pytest.raises(AccessDeniedError):
         await routing_table.register_model("model-5", provider_id="test_provider")
@@ -673,3 +673,114 @@ async def test_access_denied_for_users_with_no_general_access(
     # This user should still get 403 because they have no general access
     with pytest.raises(AccessDeniedError):
         await routing_table.list_models()
+
+
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_delete_access_denied_returns_403_not_404(mock_get_authenticated_user, test_setup_with_access_policy):
+    """Test that delete operations return 403 instead of 404 when user lacks access to existing resource."""
+    routing_table = test_setup_with_access_policy
+
+    # Register a model as user-1 (who has full access according to the policy)
+    mock_get_authenticated_user.return_value = User("user-1", {"roles": ["admin"], "projects": ["foo", "bar"]})
+    await routing_table.register_model("restricted-model", provider_id="test_provider")
+
+    # Switch to a user with no access to the model (not user-1, user-2, or user-3)
+    mock_get_authenticated_user.return_value = User(
+        "no-access-user",
+        {
+            "roles": ["restricted"],
+            "projects": ["unauthorized"],
+        },
+    )
+
+    # Try to get the object - should get 403 access denied, not 404 not found
+    with pytest.raises(AccessDeniedError):
+        await routing_table.get_object_by_identifier("model", "restricted-model")
+
+    # This means delete operations will also properly return 403 instead of 404
+    # since they use get_object_by_identifier internally
+
+
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_idempotent_delete_behavior(mock_get_authenticated_user, test_setup_with_access_policy):
+    """Test that delete operations are idempotent when user has permission."""
+    routing_table = test_setup_with_access_policy
+
+    # Set up user-1 who has DELETE permission
+    mock_get_authenticated_user.return_value = User("user-1", {"roles": ["admin"], "projects": ["foo", "bar"]})
+
+    # Test 1: Delete non-existent resource should succeed (idempotent)
+    # This should NOT raise an error, even though the resource doesn't exist
+    await routing_table.unregister_model("non-existent-model")  # Should succeed
+
+    # Test 2: Delete existing resource should succeed
+    await routing_table.register_model("test-model", provider_id="test_provider")
+    await routing_table.unregister_model("test-model")  # Should succeed
+
+    # Test 3: Delete the same resource again should succeed (idempotent)
+    await routing_table.unregister_model("test-model")  # Should succeed again
+
+    # Test 4: User without DELETE permission should get 403 regardless of resource existence
+    mock_get_authenticated_user.return_value = User(
+        "no-delete-user",
+        {
+            "roles": ["restricted"],
+            "projects": ["unauthorized"],
+        },
+    )
+
+    # Should get 403 for non-existent resource
+    with pytest.raises(AccessDeniedError):
+        await routing_table.unregister_model("non-existent-model")
+
+    # Should get 403 for existing resource (create one as user-1 first)
+    mock_get_authenticated_user.return_value = User("user-1", {"roles": ["admin"], "projects": ["foo", "bar"]})
+    await routing_table.register_model("protected-model", provider_id="test_provider")
+
+    mock_get_authenticated_user.return_value = User(
+        "no-delete-user",
+        {
+            "roles": ["restricted"],
+            "projects": ["unauthorized"],
+        },
+    )
+
+    with pytest.raises(AccessDeniedError):
+        await routing_table.unregister_model("protected-model")
+
+
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_vector_db_delete_behavior(mock_get_authenticated_user, test_setup_with_access_policy):
+    """Test vector DB delete operations match the user's requirements."""
+    routing_table = test_setup_with_access_policy
+
+    # Note: This test uses ModelsRoutingTable, but the logic is the same for VectorDBsRoutingTable
+    # since they both inherit from CommonRoutingTableImpl
+
+    # Test 1: User with DELETE permission deleting non-existent resource → 200 OK (idempotent)
+    mock_get_authenticated_user.return_value = User("user-1", {"roles": ["admin"], "projects": ["foo", "bar"]})
+
+    # This should succeed without any error (idempotent delete)
+    await routing_table.unregister_model("my_demo_vector_db")
+
+    # Test 2: User with DELETE permission deleting existing resource → 200 OK
+    await routing_table.register_model("my_demo_vector_db", provider_id="test_provider")
+    await routing_table.unregister_model("my_demo_vector_db")  # Should succeed
+
+    # Test 3: User with DELETE permission deleting already-deleted resource → 200 OK (idempotent)
+    await routing_table.unregister_model("my_demo_vector_db")  # Should succeed again
+
+    # Test 4: User WITHOUT DELETE permission → 403 Forbidden (regardless of resource existence)
+    mock_get_authenticated_user.return_value = User(
+        "no-delete-user", {"roles": ["restricted"], "projects": ["unauthorized"]}
+    )
+
+    # Should get 403 for non-existent resource
+    with pytest.raises(AccessDeniedError) as exc_info:
+        await routing_table.unregister_model("my_demo_vector_db")
+
+    # Verify it's a proper 403 access denied error
+    assert "cannot perform action 'delete'" in str(exc_info.value)

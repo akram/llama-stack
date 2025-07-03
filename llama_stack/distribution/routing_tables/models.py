@@ -76,7 +76,4 @@ class ModelsRoutingTable(CommonRoutingTableImpl, Models):
         return registered_model
 
     async def unregister_model(self, model_id: str) -> None:
-        existing_model = await self.get_model(model_id)
-        if existing_model is None:
-            raise ValueError(f"Model {model_id} not found")
-        await self.unregister_object(existing_model)
+        await self.unregister_object_by_id("model", model_id)
