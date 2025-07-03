@@ -1,4 +1,4 @@
-version: 2
+version: '2'
 image_name: remote-vllm
 apis:
 - agents
@@ -16,20 +16,20 @@ providers:
     provider_type: remote::vllm
     config:
       url: ${env.VLLM_URL:=http://localhost:8000/v1}
-      max_tokens: ${env.VLLM_MAX_TOKENS:=4096}
-      api_token: ${env.VLLM_API_TOKEN:=fake}
-      tls_verify: ${env.VLLM_TLS_VERIFY:=true}
+      max_tokens: 4096
+      tls_verify: false
   - provider_id: sentence-transformers
     provider_type: inline::sentence-transformers
     config: {}
   vector_io:
-  - provider_id: faiss
-    provider_type: inline::faiss
+  - provider_id: milvus
+    provider_type: inline::milvus
     config:
+      db_path: ${env.MILVUS_DB_PATH}
       kvstore:
         type: sqlite
         namespace: null
-        db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/faiss_store.db
+        db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/milvus_registry.db
   safety:
   - provider_id: llama-guard
     provider_type: inline::llama-guard
@@ -46,6 +46,13 @@ providers:
       responses_store:
         type: sqlite
         db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/responses_store.db
+  telemetry:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      service_name: "${env.OTEL_SERVICE_NAME:=\u200B}"
+      sinks: ${env.TELEMETRY_SINKS:=console,sqlite}
+      sqlite_db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/trace_store.db
   eval:
   - provider_id: meta-reference
     provider_type: inline::meta-reference
@@ -79,24 +86,17 @@ providers:
   - provider_id: braintrust
     provider_type: inline::braintrust
     config:
-      openai_api_key: ${env.OPENAI_API_KEY:=}
-  telemetry:
-  - provider_id: meta-reference
-    provider_type: inline::meta-reference
-    config:
-      service_name: "${env.OTEL_SERVICE_NAME:=\u200B}"
-      sinks: ${env.TELEMETRY_SINKS:=console,sqlite}
-      sqlite_db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/trace_store.db
+      openai_api_key: ${env.OPENAI_API_KEY:}
   tool_runtime:
   - provider_id: brave-search
     provider_type: remote::brave-search
     config:
-      api_key: ${env.BRAVE_SEARCH_API_KEY:=}
+      api_key: ${env.BRAVE_SEARCH_API_KEY:}
       max_results: 3
   - provider_id: tavily-search
     provider_type: remote::tavily-search
     config:
-      api_key: ${env.TAVILY_SEARCH_API_KEY:=}
+      api_key: ${env.TAVILY_SEARCH_API_KEY:}
       max_results: 3
   - provider_id: rag-runtime
     provider_type: inline::rag-runtime
@@ -107,21 +107,18 @@ providers:
   - provider_id: wolfram-alpha
     provider_type: remote::wolfram-alpha
     config:
-      api_key: ${env.WOLFRAM_ALPHA_API_KEY:=}
+      api_key: ${env.WOLFRAM_ALPHA_API_KEY:}
 metadata_store:
   type: sqlite
   db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/registry.db
-inference_store:
-  type: sqlite
-  db_path: ${env.SQLITE_STORE_DIR:=~/.llama/distributions/remote-vllm}/inference_store.db
 models:
 - metadata: {}
   model_id: ${env.INFERENCE_MODEL}
   provider_id: vllm-inference
   model_type: llm
 - metadata:
-    embedding_dimension: 384
-  model_id: all-MiniLM-L6-v2
+    embedding_dimension: 768
+  model_id: ibm-granite/granite-embedding-125m-english
   provider_id: sentence-transformers
   model_type: embedding
 shields: []
@@ -138,3 +135,17 @@ tool_groups:
   provider_id: wolfram-alpha
 server:
   port: 8321
+  auth:
+    provider_type: openshift_oauth
+    config:
+      api_server_url: ${env.OPENSHIFT_SERVER_API_URL}
+      claims_mapping:
+        groups: "roles"
+    access_policy:
+    - permit:
+        actions: [create, read, update, delete]
+      when: user with cluster-admins in roles
+    - forbid:
+        actions: [create, read, update, delete]
+      unless: user with cluster-admins in roles
+

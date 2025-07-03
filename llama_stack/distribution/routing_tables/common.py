@@ -14,6 +14,7 @@ from llama_stack.distribution.datatypes import (
     RoutableObject,
     RoutableObjectWithProvider,
     RoutedProtocol,
+    User,
 )
 from llama_stack.distribution.request_headers import get_authenticated_user
 from llama_stack.distribution.store import DistributionRegistry
@@ -210,6 +211,22 @@ class CommonRoutingTableImpl(RoutingTable):
             return obj
 
     async def get_all_with_type(self, type: str) -> list[RoutableObjectWithProvider]:
+        user = get_authenticated_user()
+
+        # Early access check - if we can determine the user has no access at all to this resource type,
+        # return AccessDeniedError immediately without querying objects
+        if user and self._should_deny_all_access(type, user):
+            from llama_stack.distribution.access_control.conditions import ProtectedResource
+
+            class GenericResource(ProtectedResource):
+                def __init__(self, resource_type: str):
+                    self.type = resource_type
+                    self.identifier = "*"
+                    self.owner = None
+
+            raise AccessDeniedError("read", GenericResource(type), user)
+
+        # Get objects and apply filtering
         objs = await self.dist_registry.get_all()
         filtered_objs = [obj for obj in objs if obj.type == type]
 
@@ -223,7 +240,6 @@ class CommonRoutingTableImpl(RoutingTable):
             # If user has no access to any resources of this type after filtering, throw AccessDeniedError
             # instead of returning empty list
             if original_count > 0 and len(filtered_objs) == 0:
-                user = get_authenticated_user()
                 if user:  # Only throw error if user is authenticated but has no access
                     from llama_stack.distribution.access_control.conditions import ProtectedResource
 
@@ -236,3 +252,121 @@ class CommonRoutingTableImpl(RoutingTable):
                     raise AccessDeniedError("read", GenericResource(type), user)
 
         return filtered_objs
+
+    def _should_deny_all_access(self, resource_type: str, user: User) -> bool:
+        """
+        Check if we can determine early that a user has no access to any resources of a given type.
+        This optimization avoids querying all objects when we know the user will be denied.
+
+        Returns True only if we're certain the user has no access to ANY resource of this type.
+        Returns False if the user might have access (requiring filtering) or if we can't determine.
+        """
+        from llama_stack.distribution.access_control.access_control import Action, as_list, default_policy
+        from llama_stack.distribution.access_control.conditions import parse_conditions
+
+        policy = self.policy if self.policy else default_policy()
+        action = Action.READ
+        qualified_resource_pattern = f"{resource_type}::*"
+
+        # Check each rule to see if we can make an early determination
+        for rule in policy:
+            # Check forbid rules first - if any forbid rule matches globally, deny early
+            if rule.forbid:
+                scope = rule.forbid
+
+                # Check if this forbid rule applies to this user and resource type
+                if (
+                    (not scope.principal or scope.principal == user.principal)
+                    and (
+                        not scope.resource
+                        or scope.resource == qualified_resource_pattern
+                        or scope.resource.endswith("::*")
+                    )
+                    and action in (scope.actions if isinstance(scope.actions, list) else [scope.actions])
+                ):
+                    # If it's an unconditional forbid, deny early
+                    if not rule.when and not rule.unless:
+                        return True
+
+                    # If it has conditions that don't depend on resource ownership, check them
+                    if rule.when and self._can_evaluate_conditions_early(rule.when, user):
+                        conditions = parse_conditions(as_list(rule.when))
+                        # For early evaluation, we create a mock resource without owner
+                        mock_resource = type(
+                            "MockResource", (), {"type": resource_type, "identifier": "*", "owner": None}
+                        )()
+                        if all(self._condition_matches_without_owner(cond, mock_resource, user) for cond in conditions):
+                            return True
+
+                    if rule.unless and self._can_evaluate_conditions_early(rule.unless, user):
+                        conditions = parse_conditions(as_list(rule.unless))
+                        mock_resource = type(
+                            "MockResource", (), {"type": resource_type, "identifier": "*", "owner": None}
+                        )()
+                        if not all(
+                            self._condition_matches_without_owner(cond, mock_resource, user) for cond in conditions
+                        ):
+                            return True
+
+            # Check permit rules - if we find any that might grant access, we can't deny early
+            elif rule.permit:
+                scope = rule.permit
+
+                if (
+                    (not scope.principal or scope.principal == user.principal)
+                    and (
+                        not scope.resource
+                        or scope.resource == qualified_resource_pattern
+                        or scope.resource.endswith("::*")
+                    )
+                    and action in (scope.actions if isinstance(scope.actions, list) else [scope.actions])
+                ):
+                    # If it's an unconditional permit, user might have access
+                    if not rule.when and not rule.unless:
+                        return False
+
+                    # If conditions might be satisfied, user might have access
+                    # We can't determine this early if conditions depend on resource ownership
+                    if not self._can_evaluate_conditions_early(rule.when if rule.when else rule.unless, user):
+                        return False
+
+        # If we reach here with no matching permit rules, the default is to deny
+        return True
+
+    def _can_evaluate_conditions_early(self, conditions: str | list[str] | None, user: User) -> bool:
+        """
+        Check if we can evaluate conditions without knowing specific resource details.
+        Returns False if conditions depend on resource ownership or other resource-specific data.
+        """
+        if not conditions:
+            return True
+
+        from llama_stack.distribution.access_control.access_control import as_list
+        from llama_stack.distribution.access_control.conditions import parse_conditions
+
+        try:
+            parsed_conditions = parse_conditions(as_list(conditions))
+            for condition in parsed_conditions:
+                # These conditions depend on resource ownership, can't evaluate early
+                if hasattr(condition, "owners_values") or condition.__class__.__name__ in [
+                    "UserIsOwner",
+                    "UserIsNotOwner",
+                    "UserInOwnersList",
+                    "UserNotInOwnersList",
+                ]:
+                    return False
+            return True
+        except Exception:
+            return False
+
+    def _condition_matches_without_owner(self, condition, mock_resource, user: User) -> bool:
+        """
+        Evaluate conditions that don't depend on resource ownership.
+        """
+        condition_name = condition.__class__.__name__
+
+        if condition_name in ["UserWithValueInList", "UserWithValueNotInList"]:
+            return condition.matches(mock_resource, user)
+
+        # For owner-based conditions, we conservatively return False to avoid early denial
+        return False

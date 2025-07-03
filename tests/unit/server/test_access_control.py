@@ -26,24 +26,19 @@ def _return_model(model):
     return model
 
 
-@pytest.fixture
-async def test_setup(cached_disk_dist_registry):
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_access_control_with_cache(mock_get_authenticated_user, cached_disk_dist_registry):
+    registry = await anext(cached_disk_dist_registry)
     mock_inference = Mock()
     mock_inference.__provider_spec__ = MagicMock()
     mock_inference.__provider_spec__.api = Api.inference
     mock_inference.register_model = AsyncMock(side_effect=_return_model)
     routing_table = ModelsRoutingTable(
         impls_by_provider_id={"test_provider": mock_inference},
-        dist_registry=cached_disk_dist_registry,
+        dist_registry=registry,
         policy={},
     )
-    yield cached_disk_dist_registry, routing_table
-
-
-@pytest.mark.asyncio
-@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_access_control_with_cache(mock_get_authenticated_user, test_setup):
-    registry, routing_table = test_setup
     model_public = ModelWithOwner(
         identifier="model-public",
         provider_id="test_provider",
@@ -107,8 +102,17 @@ async def test_access_control_with_cache(mock_get_authenticated_user, test_setup
 
 @pytest.mark.asyncio
 @patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_access_control_and_updates(mock_get_authenticated_user, test_setup):
-    registry, routing_table = test_setup
+async def test_access_control_and_updates(mock_get_authenticated_user, cached_disk_dist_registry):
+    mock_inference = Mock()
+    mock_inference.__provider_spec__ = MagicMock()
+    mock_inference.__provider_spec__.api = Api.inference
+    mock_inference.register_model = AsyncMock(side_effect=_return_model)
+    routing_table = ModelsRoutingTable(
+        impls_by_provider_id={"test_provider": mock_inference},
+        dist_registry=cached_disk_dist_registry,
+        policy={},
+    )
+    registry = cached_disk_dist_registry
     model_public = ModelWithOwner(
         identifier="model-updates",
         provider_id="test_provider",
@@ -146,8 +150,17 @@ async def test_access_control_and_updates(mock_get_authenticated_user, test_setu
 
 @pytest.mark.asyncio
 @patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_access_control_empty_attributes(mock_get_authenticated_user, test_setup):
-    registry, routing_table = test_setup
+async def test_access_control_empty_attributes(mock_get_authenticated_user, cached_disk_dist_registry):
+    mock_inference = Mock()
+    mock_inference.__provider_spec__ = MagicMock()
+    mock_inference.__provider_spec__.api = Api.inference
+    mock_inference.register_model = AsyncMock(side_effect=_return_model)
+    routing_table = ModelsRoutingTable(
+        impls_by_provider_id={"test_provider": mock_inference},
+        dist_registry=cached_disk_dist_registry,
+        policy={},
+    )
+    registry = cached_disk_dist_registry
     model = ModelWithOwner(
         identifier="model-empty-attrs",
         provider_id="test_provider",
@@ -171,8 +184,17 @@ async def test_access_control_empty_attributes(mock_get_authenticated_user, test
 
 @pytest.mark.asyncio
 @patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_no_user_attributes(mock_get_authenticated_user, test_setup):
-    registry, routing_table = test_setup
+async def test_no_user_attributes(mock_get_authenticated_user, cached_disk_dist_registry):
+    mock_inference = Mock()
+    mock_inference.__provider_spec__ = MagicMock()
+    mock_inference.__provider_spec__.api = Api.inference
+    mock_inference.register_model = AsyncMock(side_effect=_return_model)
+    routing_table = ModelsRoutingTable(
+        impls_by_provider_id={"test_provider": mock_inference},
+        dist_registry=cached_disk_dist_registry,
+        policy={},
+    )
+    registry = cached_disk_dist_registry
     model_public = ModelWithOwner(
         identifier="model-public-2",
         provider_id="test_provider",
@@ -202,9 +224,18 @@ async def test_no_user_attributes(mock_get_authenticated_user, test_setup):
 
 @pytest.mark.asyncio
 @patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_automatic_access_attributes(mock_get_authenticated_user, test_setup):
+async def test_automatic_access_attributes(mock_get_authenticated_user, cached_disk_dist_registry):
     """Test that newly created resources inherit access attributes from their creator."""
-    registry, routing_table = test_setup
+    mock_inference = Mock()
+    mock_inference.__provider_spec__ = MagicMock()
+    mock_inference.__provider_spec__.api = Api.inference
+    mock_inference.register_model = AsyncMock(side_effect=_return_model)
+    routing_table = ModelsRoutingTable(
+        impls_by_provider_id={"test_provider": mock_inference},
+        dist_registry=cached_disk_dist_registry,
+        policy={},
+    )
+    registry = cached_disk_dist_registry
 
     # Set creator's attributes
     creator_attributes = {"roles": ["data-scientist"], "teams": ["ml-team"], "projects": ["llama-3"]}
@@ -245,8 +276,9 @@ async def test_automatic_access_attributes(mock_get_authenticated_user, test_set
     assert model.identifier == "auto-access-model"
 
 
-@pytest.fixture
-async def test_setup_with_access_policy(cached_disk_dist_registry):
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_access_policy(mock_get_authenticated_user, cached_disk_dist_registry):
     mock_inference = Mock()
     mock_inference.__provider_spec__ = MagicMock()
     mock_inference.__provider_spec__.api = Api.inference
@@ -277,13 +309,6 @@ async def test_setup_with_access_policy(cached_disk_dist_registry):
         dist_registry=cached_disk_dist_registry,
         policy=policy,
     )
-    yield routing_table
-
-
-@pytest.mark.asyncio
-@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
-async def test_access_policy(mock_get_authenticated_user, test_setup_with_access_policy):
-    routing_table = test_setup_with_access_policy
     mock_get_authenticated_user.return_value = User(
         "user-1",
         {
