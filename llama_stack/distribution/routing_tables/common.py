@@ -9,6 +9,7 @@ from typing import Any
 from llama_stack.apis.resource import ResourceType
 from llama_stack.apis.scoring_functions import ScoringFn
 from llama_stack.distribution.access_control.access_control import AccessDeniedError, is_action_allowed
+from llama_stack.distribution.access_control.conditions import ProtectedResource
 from llama_stack.distribution.datatypes import (
     AccessRule,
     RoutableObject,
@@ -212,6 +213,28 @@ class CommonRoutingTableImpl(RoutingTable):
     async def get_all_with_type(self, type: str) -> list[RoutableObjectWithProvider]:
         objs = await self.dist_registry.get_all()
         filtered_objs = [obj for obj in objs if obj.type == type]
+
+        # Check if user has general access to this resource type
+        # This applies whether there are resources or not
+        user = get_authenticated_user()
+        if user:  # Only check authenticated users
+
+            class PublicResource(ProtectedResource):
+                def __init__(self, resource_type: str):
+                    self.type = resource_type
+                    self.identifier = "public-test"
+                    self.owner = None  # Public resource has no owner
+
+            # If user has no general access to this resource type, always return 403
+            if not is_action_allowed(self.policy, "read", PublicResource(type), user):
+
+                class GenericResource(ProtectedResource):
+                    def __init__(self, resource_type: str):
+                        self.type = resource_type
+                        self.identifier = "*"
+                        self.owner = None
+
+                raise AccessDeniedError("read", GenericResource(type), user)
 
         # Apply attribute-based access control filtering
         if filtered_objs:

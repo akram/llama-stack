@@ -565,3 +565,111 @@ def test_condition_reprs(condition):
     from llama_stack.distribution.access_control.conditions import parse_condition
 
     assert condition == str(parse_condition(condition))
+
+
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_valid_user_access_empty_list_scenarios(mock_get_authenticated_user, test_setup):
+    """Test different scenarios where users should get empty lists vs 403 errors."""
+    registry, routing_table = test_setup
+
+    # Scenario 1: Empty registry - users with general access should get empty list
+    # Note: Users without general access should get 403 even with empty registry (tested separately)
+    mock_get_authenticated_user.return_value = User("any-user", {"roles": ["user"], "teams": ["team1"]})
+    all_models = await routing_table.list_models()
+    assert len(all_models.data) == 0
+    assert all_models.data == []
+
+    # Scenario 2: User has access but no matching resources exist
+    # Add a public model that everyone can access
+    model_public = ModelWithOwner(
+        identifier="model-public",
+        provider_id="test_provider",
+        provider_resource_id="model-public",
+        model_type=ModelType.llm,
+        # No owner means public access
+    )
+    await registry.register(model_public)
+
+    # User should see the public model
+    all_models = await routing_table.list_models()
+    assert len(all_models.data) == 1
+    assert all_models.data[0].identifier == "model-public"
+
+    # Scenario 3: Test that users with proper access get empty lists when no resources match
+    # This should be different from the 403 case - if a user has read access but there are
+    # no resources that match their specific attributes, they should get empty list
+
+    # Add a model that only specific users can access
+    model_restricted = ModelWithOwner(
+        identifier="model-restricted",
+        provider_id="test_provider",
+        provider_resource_id="model-restricted",
+        model_type=ModelType.llm,
+        owner=User("owner1", {"roles": ["admin"], "teams": ["admin-team"]}),
+    )
+    await registry.register(model_restricted)
+
+    # Remove the public model so we only have restricted model
+    await registry.delete("model", "model-public")
+
+    # Now test the key scenario: user has general access but no resources match their attributes
+    # This should be the scenario that returns empty list instead of 403
+
+    # This is the case that should return empty list, not 403 - when user has some access
+    # but there are no resources that match their specific attributes
+    mock_get_authenticated_user.return_value = User("valid-user", {"roles": ["user"], "teams": ["team1"]})
+
+    # This is currently failing but should pass if implemented correctly
+    # The user should get empty list because they have valid access but no matching resources
+    try:
+        all_models = await routing_table.list_models()
+        assert len(all_models.data) == 0
+        assert all_models.data == []
+        print("✓ Test passed: User with valid access gets empty list when no resources match")
+    except AccessDeniedError:
+        print("✗ Test failed: User with valid access got 403 instead of empty list")
+        # This is the current behavior that we want to test for
+        raise AssertionError(
+            "Expected empty list, got 403 error - this indicates the access control behavior needs refinement"
+        ) from None
+
+
+@pytest.mark.asyncio
+@patch("llama_stack.distribution.routing_tables.common.get_authenticated_user")
+async def test_access_denied_for_users_with_no_general_access(
+    mock_get_authenticated_user, test_setup_with_access_policy
+):
+    """Test that users with no general access get 403 errors in all scenarios."""
+    routing_table = test_setup_with_access_policy
+
+    # Set up a specific user who should have no access according to the policy
+    mock_get_authenticated_user.return_value = User(
+        "user-no-access",
+        {
+            "roles": ["restricted"],
+            "projects": ["unauthorized"],
+        },
+    )
+
+    # Case 1: Empty registry - users with no general access should get 403, not empty list
+    with pytest.raises(AccessDeniedError):
+        await routing_table.list_models()
+
+    # Case 2: Registry with resources - users with no general access should still get 403
+    # Register a model as an admin user first
+    mock_get_authenticated_user.return_value = User("user-1", {"roles": ["admin"], "projects": ["foo", "bar"]})
+    await routing_table.register_model("test-model", provider_id="test_provider")
+
+    # Now switch back to the restricted user
+    mock_get_authenticated_user.return_value = User(
+        "user-no-access",
+        {
+            "roles": ["restricted"],
+            "projects": ["unauthorized"],
+        },
+    )
+
+    # This user should still get 403 because they have no general access
+    with pytest.raises(AccessDeniedError):
+        await routing_table.list_models()
