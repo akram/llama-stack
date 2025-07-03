@@ -68,7 +68,4 @@ class VectorDBsRoutingTable(CommonRoutingTableImpl, VectorDBs):
         return vector_db
 
     async def unregister_vector_db(self, vector_db_id: str) -> None:
-        existing_vector_db = await self.get_vector_db(vector_db_id)
-        if existing_vector_db is None:
-            raise ValueError(f"Vector DB {vector_db_id} not found")
-        await self.unregister_object(existing_vector_db)
+        await self.unregister_object_by_id("vector_db", vector_db_id)
