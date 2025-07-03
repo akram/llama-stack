@@ -110,22 +110,21 @@ class AccessDeniedError(RuntimeError):
         self.action = action
         self.resource = resource
         self.user = user
-
-        message = _build_access_denied_message(action, resource, user)
+        message = self._build_access_denied_message(action, resource, user)
         super().__init__(message)
 
 
-def _build_access_denied_message(action: str | None, resource: ProtectedResource | None, user: User | None) -> str:
-    """Build detailed error message for access denied scenarios."""
-    if action and resource and user:
-        resource_info = f"{resource.type}::{resource.identifier}"
-        user_info = f"'{user.principal}'"
-        if user.attributes:
-            attrs = ", ".join([f"{k}={v}" for k, v in user.attributes.items()])
-            user_info += f" (attributes: {attrs})"
+    def _build_access_denied_message(action: str | None, resource: ProtectedResource | None, user: User | None) -> str:
+        """Build detailed error message for access denied scenarios."""
+        if action and resource and user:
+            resource_info = f"{resource.type}::{resource.identifier}"
+            user_info = f"'{user.principal}'"
+            if user.attributes:
+                attrs = ", ".join([f"{k}={v}" for k, v in user.attributes.items()])
+                user_info += f" (attributes: {attrs})"
 
-        message = f"User {user_info} cannot perform action '{action}' on resource '{resource_info}'"
-    else:
-        message = "Insufficient permissions"
+            message = f"User {user_info} cannot perform action '{action}' on resource '{resource_info}'"
+        else:
+            message = "Insufficient permissions"
 
-    return message
+        return message
