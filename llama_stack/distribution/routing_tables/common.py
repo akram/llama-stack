@@ -215,8 +215,24 @@ class CommonRoutingTableImpl(RoutingTable):
 
         # Apply attribute-based access control filtering
         if filtered_objs:
+            original_count = len(filtered_objs)
             filtered_objs = [
                 obj for obj in filtered_objs if is_action_allowed(self.policy, "read", obj, get_authenticated_user())
             ]
+
+            # If user has no access to any resources of this type after filtering, throw AccessDeniedError
+            # instead of returning empty list
+            if original_count > 0 and len(filtered_objs) == 0:
+                user = get_authenticated_user()
+                if user:  # Only throw error if user is authenticated but has no access
+                    from llama_stack.distribution.access_control.conditions import ProtectedResource
+
+                    class GenericResource(ProtectedResource):
+                        def __init__(self, resource_type: str):
+                            self.type = resource_type
+                            self.identifier = "*"
+                            self.owner = None
+
+                    raise AccessDeniedError("read", GenericResource(type), user)
 
         return filtered_objs
