@@ -100,13 +100,18 @@ class AuthenticationMiddleware:
             try:
                 validation_result = await self.auth_provider.validate_token(token, scope)
             except httpx.TimeoutException:
-                logger.exception("Authentication request timed out")
+                logger.warning("Authentication request timed out")
                 return await self._send_auth_error(send, "Authentication service timeout")
             except ValueError as e:
-                logger.exception("Error during authentication")
+                # Try to extract username from token for better error logging
+                username = self._extract_username_from_token(token)
+                if username:
+                    logger.warning(f"Authentication failed for user: {username} - {str(e)}")
+                else:
+                    logger.warning(f"Authentication failed - {str(e)}")
                 return await self._send_auth_error(send, str(e))
-            except Exception:
-                logger.exception("Error during authentication")
+            except Exception as e:
+                logger.warning(f"Authentication service error: {str(e)}")
                 return await self._send_auth_error(send, "Authentication service error")
 
             # Store the client ID in the request scope so that downstream middleware (like QuotaMiddleware)
@@ -122,6 +127,38 @@ class AuthenticationMiddleware:
             )
 
         return await self.app(scope, receive, send)
+
+    def _extract_username_from_token(self, token: str) -> str | None:
+        """Try to extract username from token for better error logging."""
+        try:
+            # Try to decode as JWT token without verification
+            import base64
+            import json
+            
+            # Split the token into parts
+            parts = token.split('.')
+            if len(parts) >= 2:
+                # Decode the payload (second part)
+                payload = parts[1]
+                # Add padding if needed
+                padding = len(payload) % 4
+                if padding:
+                    payload += '=' * (4 - padding)
+                
+                decoded = base64.b64decode(payload)
+                data = json.loads(decoded)
+                
+                # Try common username fields
+                username = data.get('sub') or data.get('username') or data.get('name')
+                if username:
+                    return username
+                    
+        except Exception:
+            # If JWT parsing fails, token might be a service account token
+            # Just return None and use generic error message
+            pass
+        
+        return None
 
     async def _send_auth_error(self, send, message):
         await send(
