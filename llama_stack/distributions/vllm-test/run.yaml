@@ -1,0 +1,17 @@
+version: 2
+image_name: vllm-test
+
+providers:
+  inference:
+    - provider_id: vllm-remote
+      provider_type: remote::vllm
+      config:
+        url: "http://a9af6a50e848e4bb3b49f5da41ca9c43-777299576.us-east-1.elb.amazonaws.com/llm-test/facebook-opt-125m-single"
+        tls_verify: false
+        api_token: ""  # Empty token to test authentication error
+
+models:
+  - provider_id: vllm-remote
+    provider_model_id: facebook/opt-125m
+    model_id: facebook-opt-125m
+    metadata: {}

@@ -16,7 +16,9 @@ from llama_stack.core.stack import Stack
 
 async def test_vllm_auth_error_async():
     """Test that vLLM provider correctly handles missing authentication token."""
-    config_path = Path("/Users/akram/go/src/github.com/llamastack/llama-stack/stack_config.yaml")
+    config_path = Path(
+        "/Users/akram/go/src/github.com/llamastack/llama-stack/llama_stack/distributions/vllm-test/run.yaml"
+    )
     config_dict = yaml.safe_load(config_path.read_text())
     run_config = StackRunConfig(**config_dict)
 
