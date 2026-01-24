@@ -58,8 +58,8 @@ class PageIndexRagToolRuntimeConfig(BaseModel):
     def sample_run_config(cls, __distro_dir__: str, **kwargs: Any) -> dict[str, Any]:
         return {
             "pageindex_config": {
-                "tree_builder_model": "meta-llama/Llama-3.1-8B-Instruct",
-                "reasoning_model": "meta-llama/Llama-3.1-8B-Instruct",
+                "tree_builder_model": "${env.PAGEINDEX_TREE_BUILDER_MODEL:=meta-llama/Llama-3.1-8B-Instruct}",
+                "reasoning_model": "${env.PAGEINDEX_REASONING_MODEL:=meta-llama/Llama-3.1-8B-Instruct}",
                 "kvstore": {
                     "backend": "kv_default",
                     "namespace": "pageindex",
