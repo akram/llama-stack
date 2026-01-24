@@ -228,6 +228,24 @@ providers:
       max_results: 3
   - provider_id: rag-runtime
     provider_type: inline::rag-runtime
+  - provider_id: pageindex-rag-runtime
+    provider_type: remote::pageindex-rag-runtime
+    config:
+      pageindex_config:
+        api_url: ${env.PAGEINDEX_API_URL:=https://api.pageindex.example.com}
+        api_key: ${env.PAGEINDEX_API_KEY:=}
+        timeout_seconds: 60
+  - provider_id: pageindex-inline-rag-runtime
+    provider_type: inline::pageindex-rag-runtime
+    config:
+      pageindex_config:
+        tree_builder_model: ${env.PAGEINDEX_TREE_BUILDER_MODEL:=meta-llama/Llama-3.1-8B-Instruct}
+        reasoning_model: ${env.PAGEINDEX_REASONING_MODEL:=meta-llama/Llama-3.1-8B-Instruct}
+        kvstore:
+          backend: kv_default
+          namespace: pageindex
+        max_tree_depth: 5
+        min_section_length: 100
   - provider_id: model-context-protocol
     provider_type: remote::model-context-protocol
   batches:

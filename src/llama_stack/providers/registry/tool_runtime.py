@@ -36,6 +36,26 @@ def available_providers() -> list[ProviderSpec]:
         ),
         RemoteProviderSpec(
             api=Api.tool_runtime,
+            adapter_type="pageindex-rag",
+            provider_type="remote::pageindex-rag-runtime",
+            module="llama_stack.providers.remote.tool_runtime.pageindex_rag",
+            config_class="llama_stack.providers.remote.tool_runtime.pageindex_rag.config.PageIndexRagToolRuntimeConfig",
+            pip_packages=["httpx"],
+            provider_data_validator="llama_stack.providers.remote.tool_runtime.pageindex_rag.PageIndexRagToolProviderDataValidator",
+            api_dependencies=[Api.inference, Api.files],
+            description="Vectorless RAG tool runtime using remote PageIndex cloud service for reasoning-based document retrieval.",
+        ),
+        InlineProviderSpec(
+            api=Api.tool_runtime,
+            provider_type="inline::pageindex-rag-runtime",
+            pip_packages=[],
+            module="llama_stack.providers.inline.tool_runtime.pageindex_rag",
+            config_class="llama_stack.providers.inline.tool_runtime.pageindex_rag.config.PageIndexRagToolRuntimeConfig",
+            api_dependencies=[Api.inference, Api.files],  # No vector_io needed!
+            description="Inline vectorless RAG tool runtime using PageIndexEngine (LLM-based tree building and reasoning). No external service required.",
+        ),
+        RemoteProviderSpec(
+            api=Api.tool_runtime,
             adapter_type="brave-search",
             provider_type="remote::brave-search",
             module="llama_stack.providers.remote.tool_runtime.brave_search",
