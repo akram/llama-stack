@@ -287,7 +287,7 @@ class TestPageIndexRagInsert:
             metadata={"title": "Test Document"},
         )
 
-        with patch.object(rag_tool.pageindex_engine, "build_tree", new_callable=AsyncMock) as mock_build:
+        with patch.object(rag_tool.pageindex_engine, "build_index", new_callable=AsyncMock) as mock_build:
             await rag_tool.insert(
                 documents=[document],
                 vector_store_id="store_1",
@@ -325,7 +325,7 @@ class TestPageIndexRagInsert:
             for i in range(3)
         ]
 
-        with patch.object(rag_tool.pageindex_engine, "build_tree", new_callable=AsyncMock):
+        with patch.object(rag_tool.pageindex_engine, "build_index", new_callable=AsyncMock):
             await rag_tool.insert(
                 documents=documents,
                 vector_store_id="store_1",
